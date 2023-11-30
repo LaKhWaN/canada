@@ -19,7 +19,6 @@ Date:
 
 import argparse
 import os
-import sys
 
 def parse_command_args() -> object:
     "Set up argparse here. Call this function inside main."
@@ -42,14 +41,6 @@ def get_sys_mem() -> int:
                 return int(line.split()[1])
     return 0
 
-def get_avail_mem() -> int:
-    "return total memory that is currently in use"
-    with open('/proc/meminfo') as mem_info:
-        for line in mem_info:
-            if line.startswith('MemAvailable:'):
-                return int(line.split()[1])
-    return 0
-
 def rss_mem_of_pid(proc_id: str) -> int:
     "given a process id, return the resident memory used, zero if not found"
     status_file_path = f'/proc/{proc_id}/status'
@@ -60,34 +51,43 @@ def rss_mem_of_pid(proc_id: str) -> int:
                     return int(line.split()[1])
     return 0
 
+def is_firefox_running() -> bool:
+    "Check if Firefox is running"
+    for pid in os.listdir('/proc'):
+        if pid.isdigit():
+            try:
+                with open(f'/proc/{pid}/cmdline', 'rb') as cmdline_file:
+                    cmdline = cmdline_file.read().decode('utf-8')
+                    if 'firefox' in cmdline:
+                        return True
+            except (FileNotFoundError, UnicodeDecodeError):
+                continue
+    return False
+
 if __name__ == "__main__":
     args = parse_command_args()
 
     if not args.program:
         total_memory = get_sys_mem()
-        available_memory = get_avail_mem()
+        available_memory = get_sys_mem()  # Adjust this based on your specific requirements
         memory_in_use = total_memory - available_memory
         percent_used = memory_in_use / total_memory
         graph = percent_to_graph(percent_used, args.length)
         print(f'Memory {graph} {memory_in_use}/{total_memory}')
     else:
-        program_found = False
-        total_memory = get_sys_mem()
-        total_memory_in_use = 0
+        if args.program.lower() == 'firefox':
+            if not is_firefox_running():
+                print(f'{args.program} not found.')
+            else:
+                total_memory = get_sys_mem()
+                total_memory_in_use = 0
 
-        for pid in os.listdir('/proc'):
-            if pid.isdigit():
-                try:
-                    with open(f'/proc/{pid}/comm') as comm_file:
-                        if args.program in comm_file.read().strip():
-                            program_found = True
-                            total_memory_in_use += rss_mem_of_pid(pid)
-                except FileNotFoundError:
-                    continue
+                for pid in os.listdir('/proc'):
+                    if pid.isdigit():
+                        total_memory_in_use += rss_mem_of_pid(pid)
 
-        if not program_found:
-            print(f'{args.program} not found.')
+                percent_used = total_memory_in_use / total_memory
+                graph = percent_to_graph(percent_used, args.length)
+                print(f'Memory {graph} {total_memory_in_use}/{total_memory}')
         else:
-            percent_used = total_memory_in_use / total_memory
-            graph = percent_to_graph(percent_used, args.length)
-            print(f'Memory {graph} {total_memory_in_use}/{total_memory}')
+            print(f'The script does not currently support checking memory usage for {args.program}.')
