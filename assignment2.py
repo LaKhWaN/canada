@@ -25,8 +25,6 @@ def parse_command_args() -> object:
     "Set up argparse here. Call this function inside main."
     parser = argparse.ArgumentParser(description="Memory Visualiser -- See Memory Usage Report with bar charts", epilog="Copyright 2023")
     parser.add_argument("-l", "--length", type=int, default=20, help="Specify the length of the graph. Default is 20.")
-    # add argument for "human-readable". USE -H, don't use -h! -h is reserved for --help which is created automatically.
-    # check the docs for an argparse option to store this as a boolean.
     parser.add_argument("program", type=str, nargs='?', help="if a program is specified, show memory use of all associated processes. Show only total use is not.")
     args = parser.parse_args()
     return args
@@ -52,11 +50,6 @@ def get_avail_mem() -> int:
                 return int(line.split()[1])
     return 0
 
-def pids_of_prog(app_name: str) -> list:
-    "given an app name, return all pids associated with app"
-    pidof_output = os.popen(f'pidof {app_name}').read()
-    return pidof_output.split() if pidof_output else []
-
 def rss_mem_of_pid(proc_id: str) -> int:
     "given a process id, return the resident memory used, zero if not found"
     status_file_path = f'/proc/{proc_id}/status'
@@ -78,17 +71,23 @@ if __name__ == "__main__":
         graph = percent_to_graph(percent_used, args.length)
         print(f'Memory {graph} {memory_in_use}/{total_memory}')
     else:
-        pid_list = pids_of_prog(args.program)
+        program_found = False
+        total_memory = get_sys_mem()
+        total_memory_in_use = 0
 
-        if not pid_list:
+        for pid in os.listdir('/proc'):
+            if pid.isdigit():
+                try:
+                    with open(f'/proc/{pid}/comm') as comm_file:
+                        if args.program in comm_file.read().strip():
+                            program_found = True
+                            total_memory_in_use += rss_mem_of_pid(pid)
+                except FileNotFoundError:
+                    continue
+
+        if not program_found:
             print(f'{args.program} not found.')
         else:
-            total_memory = get_sys_mem()
-            total_memory_in_use = 0
-
-            for pid in pid_list:
-                total_memory_in_use += rss_mem_of_pid(pid)
-
             percent_used = total_memory_in_use / total_memory
             graph = percent_to_graph(percent_used, args.length)
             print(f'Memory {graph} {total_memory_in_use}/{total_memory}')
