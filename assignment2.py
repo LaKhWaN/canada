@@ -1,4 +1,4 @@
-
+#!/usr/bin/env python3
 
 '''
 OPS445 Assignment 2 - Winter 2023
@@ -78,12 +78,17 @@ if __name__ == "__main__":
         graph = percent_to_graph(percent_used, args.length)
         print(f'Memory {graph} {memory_in_use}/{total_memory}')
     else:
-        total_memory = get_sys_mem()
-        total_memory_in_use = 0
+        pid_list = pids_of_prog(args.program)
 
-        for pid in pids_of_prog(args.program):
-            total_memory_in_use += rss_mem_of_pid(pid)
+        if not pid_list:
+            print(f'{args.program} not found.')
+        else:
+            total_memory = get_sys_mem()
+            total_memory_in_use = 0
 
-        percent_used = total_memory_in_use / total_memory
-        graph = percent_to_graph(percent_used, args.length)
-        print(f'Memory {graph} {total_memory_in_use}/{total_memory}')
+            for pid in pid_list:
+                total_memory_in_use += rss_mem_of_pid(pid)
+
+            percent_used = total_memory_in_use / total_memory
+            graph = percent_to_graph(percent_used, args.length)
+            print(f'Memory {graph} {total_memory_in_use}/{total_memory}')
