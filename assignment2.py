@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 
 '''
 OPS445 Assignment 2 - Winter 2023
