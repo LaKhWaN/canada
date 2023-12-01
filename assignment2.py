@@ -84,6 +84,10 @@ if __name__ == "__main__":
         print(f"Memory {percent_to_graph(percent_used, args.length)} | {int(avail_mem)}/{int(total_mem)}")
 
     else:
+        if not os.popen(f"pidof {args.program}").read().strip():
+            print(f"{args.program} not found.")
+            sys.exit(1)
+
         total_rss = 0
 
         for pid in pids_of_prog(args.program):
