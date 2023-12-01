@@ -1,101 +1,116 @@
-#!/usr/bin/env python3
-
-'''
-OPS445 Assignment 2 - Winter 2023
-Program: assignment2.py 
-Author: "Student Name"
-The python code in this file is original work written by
-"Student Name". No code in this file is copied from any other source 
-except those provided by the course instructor, including any person, 
-textbook, or on-line resource. I have not shared this python script 
-with anyone or anything except for submission for grading.  
-I understand that the Academic Honesty Policy will be enforced and 
-violators will be reported and appropriate action will be taken.
-
-Description: <Enter your documentation here>
-
-Date: 
-
-'''
-
 import argparse
 import os, sys
 
-def parse_command_args() -> object:
-    "Set up argparse here. Call this function inside main."
-    parser = argparse.ArgumentParser(description="Memory Visualiser -- See Memory Usage Report with bar charts",epilog="Copyright 2023")
-    parser.add_argument("-l", "--length", type=int, default=20, help="Specify the length of the graph. Default is 20.")
-    parser.add_argument("-H", "--human-readable", action="store_true", help="Print sizes in human readable format")
-    parser.add_argument("program", type=str, nargs='?', help="if a program is specified, show memory use of all associated processes. Show only total use is not.")
-    args = parser.parse_args()
-    return args
+def parse_command_args():
+    """
+    Parses the command line arguments using argparse.
+
+    Returns:
+        argparse.Namespace: A namespace containing the parsed arguments.
+    """
+    parser = argparse.ArgumentParser(description="Memory Visualiser -- See Memory Usage Report with bar charts")
+    parser.add_argument("-H", "--human-readable", action="store_true",
+                        help="Print sizes in human readable format")
+    parser.add_argument("-l", "--length", type=int, default=20,
+                        help="Specify the length of the graph. Default is 20.")
+    parser.add_argument("program", nargs="?", help="Program to scan")
+    return parser.parse_args()
 
 def percent_to_graph(percent: float, length: int=20) -> str:
-    "turns a percent 0.0 - 1.0 into a bar graph"
-    num_hashes = int(percent * length)
-    num_spaces = length - num_hashes
-    return '[' + '#' * num_hashes + ' ' * num_spaces + ']'
+    """
+    Converts a percentage to a string of hash symbols and spaces.
+
+    Args:
+        percent (float): The percentage to be converted.
+        length (int): The total length of the bar graph.
+
+    Returns:
+        str: A string of hash symbols and spaces.
+    """
+    hashes = int(percent * length)
+    spaces = length - hashes
+    return "#" * hashes + " " * spaces
 
 def get_sys_mem() -> int:
-    "return total system memory (used or available) in kB"
-    with open('/proc/meminfo') as meminfo_file:
-        for line in meminfo_file:
-            if line.startswith('MemTotal:'):
-                return int(line.split()[1])
+    """
+    Reads the /proc/meminfo file and returns the total system memory.
+
+    Returns:
+        int: The total system memory in bytes.
+    """
+    with open("/proc/meminfo") as f:
+        for line in f:
+            if line.startswith("MemTotal:"):
+                return int(line.split()[1]) * 1024
 
 def get_avail_mem() -> int:
-    "return total memory that is currently in use"
-    with open('/proc/meminfo') as meminfo_file:
-        for line in meminfo_file:
-            if line.startswith('MemAvailable:'):
-                return int(line.split()[1])
+    """
+    Reads the /proc/meminfo file and returns the available system memory.
 
-def pids_of_prog(app_name: str) -> list:
-    "given an app name, return all pids associated with app"
-    pidof_output = os.popen(f"pidof {app_name}").read().strip()
-    if pidof_output:
-        return [int(pid) for pid in pidof_output.split()]
-    else:
-        return []
+    Returns:
+        int: The available system memory in bytes.
+    """
+    with open("/proc/meminfo") as f:
+        for line in f:
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) * 1024
 
-def rss_mem_of_pid(proc_id: str) -> int:
-    "given a process id, return the resident memory used, zero if not found"
+def pids_of_prog(program: str) -> list:
+    """
+    Gets the PIDs of a running program.
+
+    Args:
+        program (str): The name of the program to scan.
+
+    Returns:
+        list(int): A list of PIDs of the program.
+    """
+    output = os.popen(f"pidof {program}").read()
+    return [int(pid) for pid in output.strip().split()]
+
+def rss_mem_of_pid(pid: int) -> int:
+    """
+    Gets the RSS memory of a process.
+
+    Args:
+        pid (int): The PID of the process.
+
+    Returns:
+        int: The RSS memory of the process in bytes.
+    """
+    path = f"/proc/{pid}/status"
     try:
-        with open(f'/proc/{proc_id}/status') as status_file:
-            for line in status_file:
-                if line.startswith('VmRSS:'):
-                    return int(line.split()[1])
+        with open(path) as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) * 1024
     except FileNotFoundError:
-        return 0
+        pass
+    return 0
 
-if __name__ == "__main__":
+def main():
     args = parse_command_args()
+
+    if args.program:
+        pids = pids_of_prog(args.program)
+        total_rss = sum(rss_mem_of_pid(pid) for pid in pids)
+        print(f"{args.program}:")
+    else:
+        total_rss = 0
+        pids = [os.getpid()]
+
+    for pid in pids:
+        rss = rss_mem_of_pid(pid)
+        total_rss += rss
+
+        percent = rss / get_sys_mem()
+        graph = percent_to_graph(percent, args.length)
+
+        if args.human_readable:
+            print(f"{pid:>8} {graph} {percent:.2%} {rss/1024:.2f}KiB")
+        else:
+            print(f"{pid:>8} {graph} {percent:.2%} {rss:,}")
 
     if not args.program:
         total_mem = get_sys_mem()
         avail_mem = get_avail_mem()
-
-        if args.human_readable:
-            total_mem /= (1024 * 1024)  # Convert to GiB
-            avail_mem /= (1024 * 1024)  # Convert to GiB
-
-        percent_used = 1 - (avail_mem / total_mem)
-
-        print(f"Memory {percent_to_graph(percent_used, args.length)} | {int(avail_mem)}/{int(total_mem)}")
-
-    else:
-        if not os.popen(f"pidof {args.program}").read().strip():
-            print(f"{args.program} not found.")
-            sys.exit(1)
-
-        total_rss = 0
-
-        for pid in pids_of_prog(args.program):
-            total_rss += rss_mem_of_pid(pid)
-
-        if args.human_readable:
-            total_rss /= (1024 * 1024)  # Convert to GiB
-
-        percent_used = total_rss / get_sys_mem()
-
-        print(f"{args.program} {percent_to_graph(percent_used, args.length)} | {int(total_rss)}")
